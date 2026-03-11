@@ -1,0 +1,79 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+---
+
+<MainLayout title="About - Minimalist Blog">
+  <div class="about-content">
+    <p class="about-text">
+      Hi, I'm Your Name. I'm a minimalist designer and developer who enjoys writing about technology and life.
+    </p>
+    
+    <p class="about-text">
+      This blog is a collection of my thoughts, tutorials, and personal reflections. I believe in keeping things simple and focused.
+    </p>
+    
+    <div class="about-section">
+      <h2 class="about-subtitle">What I Write About</h2>
+      <ul class="about-list">
+        <li>Technical articles and tutorials</li>
+        <li>Personal reflections and life lessons</li>
+        <li>Design and development experiments</li>
+      </ul>
+    </div>
+  </div>
+</MainLayout>
+
+<style>
+  .about-content {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 32px 0;
+  }
+
+  .about-title {
+    font-size: 40px;
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+    font-weight: 400;
+    margin-bottom: 32px;
+    text-align: center;
+  }
+
+  .about-text {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text-primary);
+    margin-bottom: 24px;
+  }
+
+  .about-section {
+    margin-top: 32px;
+  }
+
+  .about-subtitle {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .about-list {
+    padding-left: 24px;
+  }
+
+  .about-list li {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+  }
+
+  :global(html[data-theme='dark']) .about-title,
+  :global(html[data-theme='dark']) .about-subtitle {
+    color: var(--text-heading);
+  }
+
+  :global(html[data-theme='dark']) .about-text,
+  :global(html[data-theme='dark']) .about-list li {
+    color: var(--text-primary);
+  }
+</style>

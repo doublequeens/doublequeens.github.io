@@ -1,0 +1,486 @@
+---
+import MainLayout from '../../layouts/MainLayout.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('technical');
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { Content, headings } = await render(post);
+const fmt = post.data.date.toISOString().slice(0, 10);
+const coverSrc = (cover?: string) => {
+  if (!cover) return '';
+  if (cover.startsWith('http://') || cover.startsWith('https://')) return cover;
+  const cleanBase = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  const cleanCover = cover.startsWith('/') ? cover : `/${cover}`;
+  return `${cleanBase}${cleanCover}`;
+};
+---
+
+<MainLayout title={`${post.data.title} - Technical`}>
+  <div class="reading-chrome" id="reading-chrome" aria-hidden="true">
+    <div class="chrome-bar">
+      <div class="chrome-title">{post.data.title}</div>
+      {headings.length > 0 && (
+        <button
+          class="toc-toggle"
+          id="toc-toggle"
+          type="button"
+          aria-label="Table of contents"
+          title="Table of contents"
+          aria-expanded="false"
+          aria-controls="toc-panel"
+        >
+          <svg class="toc-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+          </svg>
+        </button>
+      )}
+    </div>
+
+    <div class="progress-container" aria-hidden="true">
+      <div class="progress-bar" id="reading-progress"></div>
+    </div>
+
+    {headings.length > 0 && (
+      <aside class="toc-panel" id="toc-panel" aria-label="Table of contents" hidden>
+        <ul>
+          {headings.map((h) => (
+            <li><a href={`#${h.slug}`} data-toc-link={h.slug}>{h.text}</a></li>
+          ))}
+        </ul>
+      </aside>
+    )}
+  </div>
+
+  <article class="post-wrap" id="post-wrap">
+    <header class="post-header" id="post-header">
+      <p class="post-meta">{fmt}{post.data.readTime ? ` · ${post.data.readTime}` : ''}</p>
+      <h1 class="post-title">{post.data.title}</h1>
+      {post.data.cover && (
+        <img class="post-cover" src={coverSrc(post.data.cover)} alt={`${post.data.title} cover`} loading="eager" />
+      )}
+    </header>
+
+    <div class="post-content">
+      <Content />
+    </div>
+  </article>
+
+  <script>
+    const chrome = document.getElementById('reading-chrome');
+    const bar = document.getElementById('reading-progress');
+    const postHeader = document.getElementById('post-header');
+
+    const toggle = document.getElementById('toc-toggle');
+    const panel = document.getElementById('toc-panel');
+    const tocLinks = panel ? Array.from(panel.querySelectorAll('[data-toc-link]')) : [];
+
+    const setTocOpen = (open) => {
+      if (!toggle || !panel) return;
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      panel.hidden = !open;
+    };
+
+    if (toggle && panel) {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setTocOpen(panel.hidden);
+      });
+
+      document.addEventListener('click', (e) => {
+        const target = e.target;
+        if (!(target instanceof Node)) return;
+        if (!panel.hidden && !panel.contains(target) && !toggle.contains(target)) {
+          setTocOpen(false);
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') setTocOpen(false);
+      });
+
+      tocLinks.forEach((link) => link.addEventListener('click', () => setTocOpen(false)));
+    }
+
+    const sections = tocLinks
+      .map((link) => {
+        const slug = link.getAttribute('data-toc-link');
+        const el = slug ? document.getElementById(slug) : null;
+        return el ? { el, link } : null;
+      })
+      .filter(Boolean);
+
+    if (sections.length) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              const id = entry.target.getAttribute('id');
+              tocLinks.forEach((l) => l.classList.remove('active'));
+              const current = tocLinks.find((l) => l.getAttribute('data-toc-link') === id);
+              current?.classList.add('active');
+            }
+          }
+        },
+        { rootMargin: '-16% 0px -72% 0px', threshold: 0 }
+      );
+
+      sections.forEach((s) => observer.observe(s.el));
+    }
+
+    const updateReadingChrome = () => {
+      if (!chrome) return;
+      const y = window.scrollY || document.documentElement.scrollTop;
+      const headerBottom = postHeader
+        ? postHeader.getBoundingClientRect().bottom + (window.scrollY || document.documentElement.scrollTop)
+        : 140;
+      const show = y > headerBottom - 56;
+
+      chrome.classList.toggle('visible', show);
+      chrome.setAttribute('aria-hidden', show ? 'false' : 'true');
+
+      if (!show) setTocOpen(false);
+
+      if (bar) {
+        const total = document.documentElement.scrollHeight - window.innerHeight;
+        const p = total > 0 ? Math.min(100, Math.max(0, (y / total) * 100)) : 0;
+        bar.style.width = `${p}%`;
+      }
+    };
+
+    updateReadingChrome();
+    window.addEventListener('scroll', updateReadingChrome, { passive: true });
+    window.addEventListener('resize', updateReadingChrome);
+  </script>
+</MainLayout>
+
+<style>
+  .reading-chrome {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1010;
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+
+  .reading-chrome.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .chrome-bar {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    background: #ffffff;
+    border-bottom: 1px solid rgba(23, 23, 23, 0.1);
+  }
+
+  .chrome-title {
+    font-size: 18px;
+    line-height: 1.3;
+    color: #161616;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 12px;
+  }
+
+  .toc-toggle {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: #6a6a6a;
+    cursor: pointer;
+    padding: 0;
+  }
+  .toc-toggle:hover { color: #161616; }
+
+  .toc-icon {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+  }
+
+  .progress-container {
+    height: 2px;
+    background: rgba(17, 17, 17, 0.08);
+  }
+
+  .progress-bar {
+    width: 0%;
+    height: 100%;
+    background: #787838;
+    box-shadow: 0 0 8px rgba(120, 120, 56, 0.55), 0 0 16px rgba(120, 120, 56, 0.35);
+    transition: width 80ms linear;
+  }
+
+  .toc-panel {
+    position: absolute;
+    right: 10px;
+    top: 46px;
+    width: 220px;
+    max-height: min(62vh, 460px);
+    overflow: auto;
+    border: 1px solid #e1ddd3;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+    padding: 10px 10px 10px 8px;
+  }
+
+  .toc-panel ul { list-style: none; margin: 0; padding: 0; }
+  .toc-panel li { margin: 5px 0; }
+
+  .toc-panel a {
+    display: block;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #727272;
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    padding: 2px 0 2px 8px;
+  }
+  .toc-panel a:hover { color: #c3c8a2; border-left-color: #c3c8a2; }
+  .toc-panel a.active { color: #787838; border-left-color: #787838; font-weight: 500; }
+  .toc-panel a.active:hover { color: #c3c8a2; border-left-color: #c3c8a2; }
+
+  .post-wrap {
+    max-width: 700px;
+    margin: 0 auto;
+    font-family: "Mulish", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: rgb(51, 51, 51);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  .post-header {
+    margin: 10px 0 20px;
+    text-align: center;
+  }
+  .post-title {
+    font-size: 40px;
+    line-height: 1.2;
+    letter-spacing: -0.011em;
+    margin: 0 0 24px;
+    font-weight: 700;
+    color: #111827;
+  }
+  .post-meta {
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.6;
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+  .post-cover {
+    width: 100%;
+    display: block;
+    margin-top: 16px;
+    border-radius: 10px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background: #ececec;
+  }
+
+  .post-content :global(*) { box-sizing: border-box; }
+  .post-content :global(h1),
+  .post-content :global(h2),
+  .post-content :global(h3),
+  .post-content :global(h4),
+  .post-content :global(h5),
+  .post-content :global(h6) {
+    margin: 1.8em 0 0.55em;
+    line-height: 1.25;
+    letter-spacing: -0.011em;
+    font-weight: 700;
+    color: #111827;
+  }
+  .post-content :global(h1) { font-size: 40px; }
+  .post-content :global(h2) { font-size: 26px; line-height: 1.3; margin-top: 48px; margin-bottom: 16px; }
+  .post-content :global(h3) { font-size: 22px; }
+  .post-content :global(h4) { font-size: 18px; }
+
+  .post-content :global(p),
+  .post-content :global(li) {
+    font-size: 17px;
+    line-height: 30.6px;
+    letter-spacing: normal;
+    font-weight: 400;
+    color: rgb(51, 51, 51);
+  }
+  .post-content :global(p) { margin: 0 0 1.1em; }
+
+  .post-content :global(a) {
+    color: #787838;
+    text-decoration: none;
+    text-underline-offset: 2px;
+    font-weight: 600;
+  }
+
+  .post-content :global(ul),
+  .post-content :global(ol) {
+    margin: 20px 0 0;
+    padding-left: 24px;
+  }
+  .post-content :global(li) {
+    margin: 0 0 12px;
+    padding: 0;
+  }
+
+  .post-content :global(blockquote) {
+    margin: 30px 0 0;
+    padding: 20px 30px;
+    border-left: 5px solid #787838;
+    background: rgb(246, 246, 246);
+    color: rgb(153, 153, 153);
+    font-size: 21px;
+    line-height: 29.4px;
+    font-weight: 700;
+  }
+
+  .post-content :global(hr) {
+    border: 0;
+    border-top: 1px solid #e5e7eb;
+    margin: 2em 0;
+  }
+
+  .post-content :global(code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: #111827;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.08em 0.35em;
+    text-decoration: none;
+  }
+  .post-content :global(pre) {
+    margin: 1.2em 0;
+    background: #f8fafc;
+    color: #111827;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+  }
+  .post-content :global(pre code) {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .post-content :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2em 0;
+    font-size: 16px;
+    overflow: hidden;
+  }
+  .post-content :global(th),
+  .post-content :global(td) {
+    border: 1px solid #e5e7eb;
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .post-content :global(th) {
+    background: #f8f9fb;
+    font-weight: 500;
+  }
+
+  .post-content :global(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin: 1.1em 0;
+  }
+
+  .post-content :global(strong) { font-weight: 600; }
+  .post-content :global(del) { opacity: 0.75; }
+
+  .post-content :global(input[type='checkbox']) {
+    transform: translateY(1px);
+    margin-right: 0.4em;
+  }
+
+  :global(html[data-theme='dark']) .post-wrap,
+  :global(html[data-theme='dark']) .post-content :global(p),
+  :global(html[data-theme='dark']) .post-content :global(li),
+  :global(html[data-theme='dark']) .post-content :global(h1),
+  :global(html[data-theme='dark']) .post-content :global(h2),
+  :global(html[data-theme='dark']) .post-content :global(h3),
+  :global(html[data-theme='dark']) .post-content :global(h4),
+  :global(html[data-theme='dark']) .post-content :global(h5),
+  :global(html[data-theme='dark']) .post-content :global(h6) {
+    color: var(--text-primary);
+  }
+
+  :global(html[data-theme='dark']) .post-content :global(a),
+  :global(html[data-theme='dark']) .toc-panel a.active {
+    color: var(--link-color);
+  }
+
+  :global(html[data-theme='dark']) .post-title {
+    color: var(--text-primary);
+  }
+
+  :global(html[data-theme='dark']) .toc-panel,
+  :global(html[data-theme='dark']) .chrome-bar {
+    background: #171717;
+    border-color: var(--border-subtle);
+  }
+
+  :global(html[data-theme='dark']) .toc-panel a,
+  :global(html[data-theme='dark']) .toc-toggle,
+  :global(html[data-theme='dark']) .chrome-title,
+  :global(html[data-theme='dark']) .post-meta,
+  :global(html[data-theme='dark']) .post-content :global(blockquote) {
+    color: var(--text-secondary);
+  }
+
+  :global(html[data-theme='dark']) .post-content :global(blockquote) {
+    background: #1d1d1d;
+  }
+
+  :global(html[data-theme='dark']) .post-content :global(code),
+  :global(html[data-theme='dark']) .post-content :global(pre),
+  :global(html[data-theme='dark']) .post-content :global(th) {
+    background: #1a1d22;
+    color: var(--text-primary);
+    border-color: #32363f;
+  }
+
+  :global(html[data-theme='dark']) .post-content :global(td),
+  :global(html[data-theme='dark']) .post-content :global(hr) {
+    border-color: #32363f;
+  }
+
+  @media (max-width: 980px) {
+    .chrome-bar { height: 40px; padding: 0 10px; }
+    .chrome-title { font-size: 16px; }
+    .toc-panel { width: min(72vw, 260px); right: 8px; top: 44px; }
+  }
+</style>
